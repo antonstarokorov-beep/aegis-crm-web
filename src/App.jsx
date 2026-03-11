@@ -4,7 +4,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { 
   MessageSquare, Send, Bot, User, Zap, ArrowRight, 
-  CheckCircle2, AlertTriangle, Phone, Calendar, Clock, FileText, Info, PhoneCall, Copy
+  CheckCircle2, AlertTriangle, Phone, Calendar, Clock, FileText, Info, PhoneCall, Copy, Mic, Lock
 } from 'lucide-react';
 
 // --- ИНИЦИАЛИЗАЦИЯ FIREBASE (ТВОИ КЛЮЧИ) ---
@@ -21,10 +21,11 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Тот самый жесткий ID базы, куда пишет Telegram-бот
 const appId = 'aegis-leads-app';
 
-// Форматирование дат
+// --- НАСТРОЙКА БЕЗОПАСНОСТИ ---
+const SECRET_PIN = '7777'; // Твой секретный ПИН-код для входа
+
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Нет данных';
   const d = new Date(timestamp);
@@ -39,6 +40,10 @@ export default function App() {
   const [accessError, setAccessError] = useState(null);
   const [copied, setCopied] = useState(false);
   
+  // Состояния для ПИН-кода
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState(false);
+  
   const [rawLeads, setRawLeads] = useState([]);
   const [messages, setMessages] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -46,6 +51,28 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   
   const scrollRef = useRef(null);
+
+  // --- ЗАЩИТА ОТ КОПИРОВАНИЯ И ПРОСМОТРА КОДА ---
+  useEffect(() => {
+    const handleContextMenu = (e) => e.preventDefault(); // Блокировка правой кнопки
+    const handleKeyDown = (e) => {
+      // Блокировка F12, Ctrl+Shift+I, Ctrl+U
+      if (e.key === 'F12' || 
+         (e.ctrlKey && e.shiftKey && e.key === 'I') || 
+         (e.ctrlKey && e.key === 'u') ||
+         (e.ctrlKey && e.key === 'U')) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const copyId = () => {
     navigator.clipboard.writeText(appId).then(() => {
@@ -59,7 +86,6 @@ export default function App() {
     if (!auth) return;
     const initAuth = async () => {
       try {
-        // Подключаемся именно к твоей базе анонимно
         await signInAnonymously(auth);
       } catch (e) { 
         setAccessError("Ошибка авторизации: " + e.message); 
@@ -72,7 +98,7 @@ export default function App() {
 
   // ЗАГРУЗКА ДАННЫХ
   useEffect(() => {
-    if (!db || !user) return;
+    if (!db || !user || !isAuthenticated) return; // Не грузим данные, пока не введен ПИН
     
     try {
       const lRef = collection(db, 'artifacts', appId, 'public', 'data', 'leads');
@@ -89,17 +115,16 @@ export default function App() {
       console.error("Firestore Init Error:", err);
       setAccessError("Ошибка базы данных: " + err.message);
     }
-  }, [user]);
+  }, [user, isAuthenticated]);
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, selectedId]);
 
-  // ОБРАБОТКА ДАННЫХ (Обогащаем лидов датами из сообщений)
+  // ОБРАБОТКА ДАННЫХ
   const leads = rawLeads.map(l => {
     const leadMsgs = messages.filter(m => String(m.chatId) === String(l.id)).sort((a,b) => a.timestamp - b.timestamp);
     const firstMsgDate = leadMsgs.length > 0 ? leadMsgs[0].timestamp : l.updatedAt;
     const lastMsgDate = leadMsgs.length > 0 ? leadMsgs[leadMsgs.length - 1].timestamp : l.updatedAt;
     
-    // Пытаемся найти телефон в сообщениях, если его нет в профиле
     let phone = l.phone;
     if (!phone) {
       const phoneRegex = /(?:\+7|8|7)[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}/;
@@ -112,6 +137,18 @@ export default function App() {
 
   const activeMessages = messages.filter(m => String(m.chatId) === String(selectedId)).sort((a, b) => a.timestamp - b.timestamp);
   const activeLead = leads.find(l => l.id === selectedId);
+
+  // ЛОГИКА ВХОДА
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (pin === SECRET_PIN) {
+      setIsAuthenticated(true);
+      setPinError(false);
+    } else {
+      setPinError(true);
+      setPin('');
+    }
+  };
 
   // ОТПРАВКА СООБЩЕНИЯ И ПЕРЕХВАТ
   const sendMessage = async (e) => {
@@ -130,7 +167,6 @@ export default function App() {
     finally { setIsSending(false); }
   };
 
-  // ПРИНУДИТЕЛЬНЫЙ ПЕРЕХВАТ (БЕЗ СООБЩЕНИЯ)
   const takeOverControl = async () => {
     if (!selectedId) return;
     try {
@@ -140,22 +176,46 @@ export default function App() {
     } catch (err) { console.error("Takeover Error:", err); }
   };
 
-  // ЭКРАН ВХОДА
+  // ЭКРАН ВХОДА (С ПИН-КОДОМ)
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-left font-sans">
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-left font-sans select-none">
         <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-sm w-full text-center border-b-8 border-blue-600">
-           <div className="w-20 h-20 bg-blue-600 rounded-3xl mx-auto flex items-center justify-center mb-8 shadow-xl shadow-blue-500/30">
-              <Bot size={40} className="text-white" />
+           <div className="w-20 h-20 bg-slate-100 rounded-3xl mx-auto flex items-center justify-center mb-8 shadow-inner">
+              <Lock size={36} className="text-slate-400" />
            </div>
-           <h1 className="text-3xl font-black text-slate-800 tracking-tighter uppercase leading-none text-center">Aegis CRM</h1>
-           <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em] mt-3 mb-10 text-center">Pro Edition</p>
+           <h1 className="text-2xl font-black text-slate-800 tracking-tighter uppercase leading-none text-center">Aegis CRM</h1>
+           <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em] mt-3 mb-8 text-center">Защищенный доступ</p>
+           
            {accessError && <p className="text-xs text-red-500 font-bold mb-4 bg-red-50 p-3 rounded-xl break-words">{accessError}</p>}
-           <button onClick={() => setIsAuthenticated(true)} disabled={!user} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg flex items-center justify-center gap-3">
-             {user ? 'Войти в систему' : 'Подключение...'} <ArrowRight size={18}/>
-           </button>
+           
+           <form onSubmit={handleLogin} className="space-y-4">
+             <div>
+               <input 
+                 type="password" 
+                 maxLength={4}
+                 value={pin}
+                 onChange={(e) => {
+                   setPin(e.target.value.replace(/\D/g, '')); // Только цифры
+                   setPinError(false);
+                 }}
+                 placeholder="••••"
+                 className={`w-full text-center text-3xl tracking-[1em] font-black p-4 bg-slate-50 border-2 rounded-2xl outline-none transition-all ${pinError ? 'border-red-400 bg-red-50 text-red-500' : 'border-slate-200 focus:border-blue-500'}`}
+               />
+               {pinError && <p className="text-[10px] text-red-500 font-bold uppercase tracking-widest mt-2 animate-pulse">Неверный код доступа</p>}
+             </div>
+             <button 
+               type="submit"
+               disabled={!user || pin.length < 4} 
+               className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-blue-500/30 flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale transition-all active:scale-95"
+             >
+               Войти <ArrowRight size={18}/>
+             </button>
+           </form>
         </div>
-        <div className="mt-8 opacity-50 text-[10px] text-white font-bold tracking-widest uppercase">ID: {appId}</div>
+        <div className="mt-8 opacity-30 text-[10px] text-white font-bold tracking-widest uppercase flex items-center gap-2">
+           <Lock size={10} /> Система защищена
+        </div>
       </div>
     );
   }
@@ -163,8 +223,8 @@ export default function App() {
   return (
     <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
       
-      {/* 1. ЛЕВАЯ КОЛОНКА: СПИСОК ЛИДОВ */}
-      <aside className="w-80 border-r border-slate-200 bg-white flex flex-col shrink-0 z-20">
+      {/* 1. ЛЕВАЯ КОЛОНКА */}
+      <aside className="w-80 border-r border-slate-200 bg-white flex flex-col shrink-0 z-20 select-none">
         <header className="h-20 flex items-center px-6 border-b shrink-0 gap-3">
            <div className="p-2 bg-blue-600 rounded-xl text-white"><MessageSquare size={18}/></div>
            <h2 className="font-black text-xs uppercase tracking-widest">Все лиды ({leads.length})</h2>
@@ -186,29 +246,41 @@ export default function App() {
         </div>
       </aside>
 
-      {/* 2. ЦЕНТРАЛЬНАЯ КОЛОНКА: ЧАТ */}
+      {/* 2. ЦЕНТРАЛЬНАЯ КОЛОНКА */}
       <main className="flex-1 flex flex-col bg-[#f8fafc] border-r border-slate-200 relative">
          {selectedId ? (
            <>
-             <header className="h-20 border-b flex items-center px-8 bg-white/50 backdrop-blur-sm shrink-0">
+             <header className="h-20 border-b flex items-center px-8 bg-white/50 backdrop-blur-sm shrink-0 select-none">
                <h2 className="font-black text-lg text-slate-800 uppercase tracking-tight">Диалог</h2>
              </header>
              <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
-                {activeMessages.map((m, i) => (
-                  <div key={i} className={`flex ${m.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
-                     <div className={`max-w-[80%] p-5 rounded-3xl shadow-sm text-left ${m.sender === 'user' ? 'bg-white border border-slate-200 text-slate-800 rounded-bl-none' : m.sender === 'ai' ? 'bg-blue-50 border border-blue-100 text-blue-900 rounded-br-none italic' : 'bg-slate-800 text-white rounded-br-none'}`}>
-                        <div className="text-[9px] font-black uppercase tracking-widest mb-2 opacity-50 flex items-center gap-1.5">
-                           {m.sender === 'user' ? <User size={10}/> : <Bot size={10}/>}
-                           {m.sender === 'user' ? 'Клиент' : m.sender === 'operator' ? 'Вы' : 'Бот'}
-                        </div>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{safeText(m.text)}</p>
-                        <div className="text-[9px] mt-2 font-bold opacity-40 text-right">{new Date(m.timestamp).toLocaleTimeString('ru-RU')}</div>
-                     </div>
-                  </div>
-                ))}
+                {activeMessages.map((m, i) => {
+                  const isVoice = typeof m.text === 'string' && m.text.includes('🔊 [Голосовое сообщение]');
+                  const displayText = isVoice ? m.text.replace('🔊 [Голосовое сообщение]:', '').trim() : safeText(m.text);
+                  
+                  return (
+                    <div key={i} className={`flex ${m.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
+                       <div className={`max-w-[80%] p-5 rounded-3xl shadow-sm text-left ${
+                         m.sender === 'user' 
+                         ? 'bg-white border border-slate-200 text-slate-800 rounded-bl-none' 
+                         : m.sender === 'ai' 
+                           ? (isVoice ? 'bg-indigo-100 border border-indigo-200 text-indigo-900 rounded-br-none shadow-md' : 'bg-blue-50 border border-blue-100 text-blue-900 rounded-br-none italic')
+                           : 'bg-slate-800 text-white rounded-br-none'
+                       }`}>
+                          <div className="text-[9px] font-black uppercase tracking-widest mb-2 opacity-50 flex items-center gap-1.5 select-none">
+                             {m.sender === 'user' ? <User size={10}/> : <Bot size={10}/>}
+                             {m.sender === 'user' ? 'Клиент' : m.sender === 'operator' ? 'Вы' : 'Бот'}
+                             {isVoice && <span className="ml-auto flex items-center gap-1 text-indigo-600 bg-indigo-200/50 px-2 py-0.5 rounded-full"><Mic size={10}/> Голосовое</span>}
+                          </div>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{displayText}</p>
+                          <div className="text-[9px] mt-2 font-bold opacity-40 text-right select-none">{new Date(m.timestamp).toLocaleTimeString('ru-RU')}</div>
+                       </div>
+                    </div>
+                  );
+                })}
                 <div ref={scrollRef} />
              </div>
-             <div className="p-6 bg-white border-t border-slate-200">
+             <div className="p-6 bg-white border-t border-slate-200 select-none">
                <form onSubmit={sendMessage} className="flex gap-3">
                   <input value={input} onChange={e => setInput(e.target.value)} className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-sm" placeholder="Ответить клиенту (перехватит управление)..." />
                   <button disabled={isSending || !input.trim()} className="bg-blue-600 text-white px-6 rounded-2xl hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center"><Send size={20}/></button>
@@ -216,20 +288,19 @@ export default function App() {
              </div>
            </>
          ) : (
-           <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-6">
+           <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-6 select-none">
               <MessageSquare size={64} strokeWidth={1} />
               <p className="text-xs font-black uppercase tracking-widest">Выберите чат слева</p>
            </div>
          )}
       </main>
 
-      {/* 3. ПРАВАЯ КОЛОНКА: КАРТОЧКА ЛИДА */}
+      {/* 3. ПРАВАЯ КОЛОНКА */}
       <aside className="w-[340px] bg-white flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
         {activeLead ? (
           <div className="p-6 space-y-6">
             
-            {/* Шапка карточки */}
-            <div className="text-center pb-6 border-b border-slate-100">
+            <div className="text-center pb-6 border-b border-slate-100 select-none">
               <div className="w-20 h-20 bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-full mx-auto flex items-center justify-center text-white shadow-lg shadow-blue-500/30 mb-4">
                 <User size={32} />
               </div>
@@ -237,8 +308,7 @@ export default function App() {
               <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-2 flex items-center justify-center gap-1"><Zap size={12}/> Telegram Lead</p>
             </div>
 
-            {/* Статус управления */}
-            <div className={`p-4 rounded-2xl flex items-start gap-3 border ${activeLead.status === 'operator_active' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
+            <div className={`p-4 rounded-2xl flex items-start gap-3 border select-none ${activeLead.status === 'operator_active' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
                <Info className="shrink-0 mt-0.5" size={18} />
                <div>
                  <p className="text-xs font-black uppercase tracking-wider mb-1">{activeLead.status === 'operator_active' ? 'Контроль у оператора' : 'Контроль у ИИ'}</p>
@@ -246,16 +316,14 @@ export default function App() {
                </div>
             </div>
 
-            {/* Кнопка ручного перехвата (если бот активен) */}
             {activeLead.status !== 'operator_active' && (
-              <button onClick={takeOverControl} className="w-full py-3 bg-slate-900 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 active:scale-95 transition-all shadow-md shadow-slate-900/10">
+              <button onClick={takeOverControl} className="w-full py-3 bg-slate-900 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 active:scale-95 transition-all shadow-md shadow-slate-900/10 select-none">
                 Перехватить управление
               </button>
             )}
 
-            {/* Резюме от ИИ */}
             <div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2"><FileText size={14}/> Резюме ИИ</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2 select-none"><FileText size={14}/> Резюме ИИ</h3>
               <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
                 <p className="text-sm font-medium text-slate-700 leading-relaxed italic">
                   {activeLead.summary ? `"${safeText(activeLead.summary)}"` : 'Резюме формируется...'}
@@ -263,17 +331,16 @@ export default function App() {
               </div>
             </div>
 
-            {/* Контакты */}
             <div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2"><Phone size={14}/> Контакты</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2 select-none"><Phone size={14}/> Контакты</h3>
               <div className="space-y-2">
                 <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Username</span>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider select-none">Username</span>
                   <span className="text-sm font-black text-slate-800">@{safeText(activeLead.username)}</span>
                 </div>
                 {activeLead.phone && (
                   <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-100">
-                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Телефон</span>
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wider select-none">Телефон</span>
                     <a href={`tel:${activeLead.phone}`} className="text-sm font-black text-blue-800 flex items-center gap-2 hover:underline">
                       {safeText(activeLead.phone)} <PhoneCall size={14} />
                     </a>
@@ -282,8 +349,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Хронология */}
-            <div>
+            <div className="select-none">
               <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2"><Calendar size={14}/> Хронология</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-xs">
@@ -303,7 +369,7 @@ export default function App() {
 
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-8 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-8 text-center select-none">
              <Info size={48} className="mb-4 opacity-50" />
              <p className="text-xs font-black uppercase tracking-widest">Профиль клиента будет отображен здесь</p>
           </div>
