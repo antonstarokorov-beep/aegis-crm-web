@@ -157,23 +157,32 @@ export default function App() {
     setIsSending(true);
     const text = input; setInput('');
     try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'leads', selectedId), {
+      // ИСПОЛЬЗУЕМ setDoc вместо updateDoc для предотвращения ошибок отсутствующего документа
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'leads', selectedId), {
         status: 'operator_active', updatedAt: Date.now()
-      });
+      }, { merge: true });
+      
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'messages'), {
         chatId: String(selectedId), sender: 'operator', text: text, timestamp: Date.now()
       });
-    } catch (err) { console.error("Send Error:", err); } 
+    } catch (err) { 
+        console.error("Send Error:", err); 
+        alert("Ошибка отправки: " + err.message); // Выведет ошибку на экран
+    } 
     finally { setIsSending(false); }
   };
 
   const takeOverControl = async () => {
     if (!selectedId) return;
     try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'leads', selectedId), {
+      // ИСПОЛЬЗУЕМ setDoc с merge
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'leads', selectedId), {
         status: 'operator_active', updatedAt: Date.now()
-      });
-    } catch (err) { console.error("Takeover Error:", err); }
+      }, { merge: true });
+    } catch (err) { 
+        console.error("Takeover Error:", err); 
+        alert("Ошибка перехвата: " + err.message); // Выведет ошибку на экран
+    }
   };
 
   // ЭКРАН ВХОДА (С ПИН-КОДОМ)
