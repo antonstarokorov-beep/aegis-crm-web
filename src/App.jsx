@@ -5,9 +5,7 @@ import {
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
-  signOut,
-  signInWithCustomToken,
-  signInAnonymously
+  signOut
 } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, addDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { 
@@ -15,13 +13,22 @@ import {
   Settings, BarChart3, Link as LinkIcon, Save, Phone, Shield, Sparkles, Search, Lock, Mail, LogOut, Database, UserCheck, Volume2, CreditCard, Wallet, Bell, Wand2, FileText, Calendar, Clock, User
 } from 'lucide-react';
 
-// --- ИНИЦИАЛИЗАЦИЯ AEGIS ENVIRONMENT ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
-const auth = app ? getAuth(app) : null;
-const db = app ? getFirestore(app) : null;
+// --- ИНИЦИАЛИЗАЦИЯ FIREBASE (Твои реальные ключи) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDCsU0EgUUByrAK_CG3UdIxQ7DTwhRkhvc",
+  authDomain: "aegis-crm-26ca9.firebaseapp.com",
+  projectId: "aegis-crm-26ca9",
+  storageBucket: "aegis-crm-26ca9.firebasestorage.app",
+  messagingSenderId: "438781854337",
+  appId: "1:438781854337:web:32dc926ebe06f15eab0380"
+};
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'aegis-saas-core';
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ID твоего проекта
+const appId = 'aegis-leads-app';
 
 const safeText = (val, fallback = '') => {
   if (typeof val === 'string' || typeof val === 'number') return String(val);
@@ -97,30 +104,14 @@ export default function App() {
     setTimeout(() => setToastMsg(''), 4000);
   };
 
-  // --- АВТОРИЗАЦИЯ ---
+  // --- АВТОРИЗАЦИЯ (ПРАВИЛЬНАЯ ДЛЯ SAAS) ---
   useEffect(() => {
     if (!auth) return;
-    let isMounted = true;
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        if (error.code === 'auth/operation-not-allowed') console.warn("Анонимная авторизация отключена.");
-        else console.error("Auto-Auth Error:", error);
-      } finally {
-        if (isMounted) setAuthReady(true);
-      }
-    };
-    initAuth();
-
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (isMounted) { setUser(u); setAuthReady(true); }
+      setUser(u);
+      setAuthReady(true);
     });
-    return () => { isMounted = false; unsubscribe(); };
+    return () => unsubscribe();
   }, []);
 
   const handleAuth = async (e) => {
@@ -128,14 +119,15 @@ export default function App() {
     if (!email || !password) return;
     setIsAuthLoading(true); setAuthError('');
     try {
-      if (isLoginMode) await signInWithEmailAndPassword(auth, email, password);
-      else {
+      if (isLoginMode) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
         await createUserWithEmailAndPassword(auth, email, password);
         showToast("Учетная запись успешно создана!");
       }
     } catch (err) {
       console.error(err);
-      if (err.code === 'auth/operation-not-allowed') setAuthError('Ошибка: Метод Email/Пароль отключен в Firebase.');
+      if (err.code === 'auth/email-already-in-use') setAuthError('Эта почта уже зарегистрирована. Выберите "Войти".');
       else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') setAuthError('Неверный логин или пароль.');
       else setAuthError(err.message);
     } finally {
@@ -207,8 +199,7 @@ export default function App() {
     if (!promptGoal.trim()) return;
     setIsGeneratingPrompt(true);
     
-    // В будущем здесь будет реальный API вызов к DeepSeek/Gemini
-    // Пока симулируем работу AI-Фабрики ботов
+    // Симуляция работы AI-Фабрики ботов
     setTimeout(() => {
       const generated = `АЛГОРИТМ КВАЛИФИКАЦИИ (Сгенерировано ИИ):\nТвоя задача: Консультация и продажа по направлению "${promptGoal}".\n\n1. Поздоровайся и уточни главный запрос клиента.\n2. Выяви потребность (какие проблемы сейчас есть).\n3. Предложи решение из нашего ассортимента.\n4. Уточни срочность и комфортный бюджет.\n5. ЗАКРЫТИЕ: Попроси номер телефона для оформления заказа или детальной консультации специалиста.`;
       setBotInstructions(generated);
@@ -224,7 +215,6 @@ export default function App() {
     return (l.name && l.name.toLowerCase().includes(term)) || (l.phone && l.phone.includes(term)) || (l.username && l.username.toLowerCase().includes(term));
   });
 
-  // Вспомогательные переменные для правой панели (Лиды)
   const activeMessages = messages.filter(m => String(m.chatId) === String(selectedId)).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
   const activeLead = leads.find(l => l.id === selectedId);
   const msgCount = activeMessages.length;
@@ -445,7 +435,7 @@ export default function App() {
                     </div>
                  </div>
 
-                 {/* Card 3: WhatsApp/VK (Агрегаторы) - ВОССТАНОВЛЕНО */}
+                 {/* Card 3: WhatsApp/VK (Агрегаторы) */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 col-span-2 flex items-center justify-between">
                     <div>
                        <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><MessageSquare size={18} className="text-slate-400"/> WhatsApp, Instagram, VK</h3>
@@ -454,7 +444,7 @@ export default function App() {
                     <button className="bg-slate-100 text-slate-700 px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-200 hover:bg-slate-200 transition-all">Подключить Агрегатор</button>
                  </div>
 
-                 {/* Card 4: Экспорт в CRM - ВОССТАНОВЛЕНО */}
+                 {/* Card 4: Экспорт в CRM */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 col-span-2 flex items-center justify-between">
                     <div>
                        <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><Database size={18} className="text-green-600"/> Экспорт лидов (AmoCRM / Bitrix24)</h3>
@@ -477,7 +467,7 @@ export default function App() {
                     <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center mb-6"><Lock size={24} className="text-green-600"/></div>
                     <h3 className="text-lg font-black text-slate-800 mb-2">Изоляция данных (Tenant)</h3>
                     <p className="text-xs text-slate-500 mb-6 leading-relaxed">Ваша база данных физически изолирована. Переписки зашифрованы. Доступ имеете только вы.</p>
-                    <div className="px-4 py-3 bg-green-50 text-green-700 rounded-xl text-xs font-bold border border-green-100 flex items-center gap-2"><Shield size={14} /> Контур защищен</div>
+                    <div className="px-4 py-3 bg-green-50 text-green-700 rounded-xl text-xs font-bold border border-green-100 flex items-center gap-2"><Shield size={14} /> Tenant ID: {user?.uid?.substring(0,10)}...</div>
                  </div>
 
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200">
@@ -491,7 +481,7 @@ export default function App() {
                     <button onClick={() => showToast("Политика хранения обновлена")} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all">Применить политику</button>
                  </div>
 
-                 {/* ЮРИДИЧЕСКИЕ ДОКУМЕНТЫ - ВОССТАНОВЛЕНО */}
+                 {/* ЮРИДИЧЕСКИЕ ДОКУМЕНТЫ */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 col-span-2">
                     <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2"><UserCheck size={18} className="text-slate-400"/> Юридические документы (Для сайта)</h3>
                     <p className="text-xs text-slate-500 mb-6">Чтобы использовать агента легально, разместите эти документы рядом с виджетом чата или в описании бота.</p>
@@ -551,7 +541,7 @@ export default function App() {
 
       </main>
 
-      {/* 4. ПРАВАЯ ПАНЕЛЬ ЛИДА (ВОССТАНОВЛЕНО - Показывается только когда выбран диалог) */}
+      {/* 4. ПРАВАЯ ПАНЕЛЬ ЛИДА (Показывается только когда выбран диалог) */}
       {currentTab === 'chats' && activeLead && (
         <aside className="w-80 border-l border-slate-200 bg-white flex flex-col shrink-0 z-20 shadow-xl overflow-y-auto">
            <div className="p-6">
