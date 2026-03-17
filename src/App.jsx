@@ -5,7 +5,9 @@ import {
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
-  signOut
+  signOut,
+  signInWithCustomToken,
+  signInAnonymously
 } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, addDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { 
@@ -13,22 +15,13 @@ import {
   Settings, BarChart3, Link as LinkIcon, Save, Phone, Shield, Sparkles, Search, Lock, Mail, LogOut, Database, UserCheck, Volume2, CreditCard, Wallet, Bell, Wand2, FileText, Calendar, Clock, User
 } from 'lucide-react';
 
-// --- ИНИЦИАЛИЗАЦИЯ FIREBASE (Твои реальные ключи) ---
-const firebaseConfig = {
-  apiKey: "AIzaSyDCsU0EgUUByrAK_CG3UdIxQ7DTwhRkhvc",
-  authDomain: "aegis-crm-26ca9.firebaseapp.com",
-  projectId: "aegis-crm-26ca9",
-  storageBucket: "aegis-crm-26ca9.firebasestorage.app",
-  messagingSenderId: "438781854337",
-  appId: "1:438781854337:web:32dc926ebe06f15eab0380"
-};
+// --- ИНИЦИАЛИЗАЦИЯ AEGIS ENVIRONMENT ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
+const auth = app ? getAuth(app) : null;
+const db = app ? getFirestore(app) : null;
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-// ID твоего проекта
-const appId = 'aegis-leads-app';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'aegis-saas-core';
 
 const safeText = (val, fallback = '') => {
   if (typeof val === 'string' || typeof val === 'number') return String(val);
@@ -86,11 +79,19 @@ export default function App() {
   const [input, setInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Settings State
+  // AI Settings State
   const [botInstructions, setBotInstructions] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Integrations State (Новые поля для ключей)
+  const [tgToken, setTgToken] = useState('');
+  const [envyboxKey, setEnvyboxKey] = useState('');
+  const [elevenLabsKey, setElevenLabsKey] = useState('');
   const [voiceType, setVoiceType] = useState('builtin');
   const [builtinVoice, setBuiltinVoice] = useState('male_1');
+  const [isSavingIntegrations, setIsSavingIntegrations] = useState(false);
+
+  // Security settings
   const [dataRetention, setDataRetention] = useState('90');
 
   // AI Prompt Generator State
@@ -104,14 +105,30 @@ export default function App() {
     setTimeout(() => setToastMsg(''), 4000);
   };
 
-  // --- АВТОРИЗАЦИЯ (ПРАВИЛЬНАЯ ДЛЯ SAAS) ---
+  // --- АВТОРИЗАЦИЯ ---
   useEffect(() => {
     if (!auth) return;
+    let isMounted = true;
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        if (error.code === 'auth/operation-not-allowed') console.warn("Анонимная авторизация отключена.");
+        else console.error("Auto-Auth Error:", error);
+      } finally {
+        if (isMounted) setAuthReady(true);
+      }
+    };
+    initAuth();
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthReady(true);
+      if (isMounted) { setUser(u); setAuthReady(true); }
     });
-    return () => unsubscribe();
+    return () => { isMounted = false; unsubscribe(); };
   }, []);
 
   const handleAuth = async (e) => {
@@ -119,15 +136,14 @@ export default function App() {
     if (!email || !password) return;
     setIsAuthLoading(true); setAuthError('');
     try {
-      if (isLoginMode) {
-        await signInWithEmailAndPassword(auth, email, password);
-      } else {
+      if (isLoginMode) await signInWithEmailAndPassword(auth, email, password);
+      else {
         await createUserWithEmailAndPassword(auth, email, password);
         showToast("Учетная запись успешно создана!");
       }
     } catch (err) {
       console.error(err);
-      if (err.code === 'auth/email-already-in-use') setAuthError('Эта почта уже зарегистрирована. Выберите "Войти".');
+      if (err.code === 'auth/operation-not-allowed') setAuthError('Ошибка: Метод Email/Пароль отключен в Firebase.');
       else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') setAuthError('Неверный логин или пароль.');
       else setAuthError(err.message);
     } finally {
@@ -142,19 +158,34 @@ export default function App() {
     if (!db || !user || !authReady) return;
     const tenantPath = `artifacts/${appId}/users/${user.uid}`;
     
+    // Лиды
     const unsubL = onSnapshot(collection(db, tenantPath, 'leads'), (s) => {
         setLeads(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
     }, (error) => console.error("Leads Snapshot Error:", error));
     
+    // Сообщения
     const unsubM = onSnapshot(collection(db, tenantPath, 'messages'), (s) => {
         setMessages(s.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => console.error("Messages Snapshot Error:", error));
 
+    // Настройки ИИ (Промпты)
     const unsubConfig = onSnapshot(doc(db, tenantPath, 'config', 'bot_settings'), (docSnap) => {
         if (docSnap.exists()) setBotInstructions(docSnap.data().instructions || '');
     }, (error) => console.error("Config Snapshot Error:", error));
 
-    return () => { unsubL(); unsubM(); unsubConfig(); };
+    // Настройки Интеграций (Ключи API)
+    const unsubIntegrations = onSnapshot(doc(db, tenantPath, 'config', 'integrations'), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            setTgToken(data.telegram_token || '');
+            setEnvyboxKey(data.envybox_api_key || '');
+            setElevenLabsKey(data.elevenlabs_api_key || '');
+            if (data.voice_type) setVoiceType(data.voice_type);
+            if (data.builtin_voice) setBuiltinVoice(data.builtin_voice);
+        }
+    }, (error) => console.error("Integrations Snapshot Error:", error));
+
+    return () => { unsubL(); unsubM(); unsubConfig(); unsubIntegrations(); };
   }, [user, authReady]);
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, selectedId, currentTab]);
@@ -170,6 +201,25 @@ export default function App() {
       showToast("Сценарии ИИ-агента успешно обновлены!");
     } catch (e) { showToast("Ошибка сохранения: " + e.message); }
     setIsSaving(false);
+  };
+
+  // Сохранение ключей интеграций
+  const saveIntegrations = async () => {
+    if (!user) return;
+    setIsSavingIntegrations(true);
+    try {
+      const tenantPath = `artifacts/${appId}/users/${user.uid}`;
+      await setDoc(doc(db, tenantPath, 'config', 'integrations'), {
+        telegram_token: tgToken,
+        envybox_api_key: envyboxKey,
+        elevenlabs_api_key: elevenLabsKey,
+        voice_type: voiceType,
+        builtin_voice: builtinVoice,
+        updatedAt: Date.now()
+      }, { merge: true });
+      showToast("Настройки интеграций надежно сохранены!");
+    } catch (e) { showToast("Ошибка сохранения: " + e.message); }
+    setIsSavingIntegrations(false);
   };
 
   const sendMessage = async (e) => {
@@ -327,6 +377,13 @@ export default function App() {
                 </div>
              </header>
 
+             {activeLead?.summary && (
+               <div className="absolute top-24 right-10 w-72 bg-white/90 backdrop-blur-md p-5 rounded-2xl shadow-xl border border-slate-100 z-20">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-blue-600 mb-2">Анализ от ИИ-агента</p>
+                  <p className="text-xs font-medium text-slate-700 leading-relaxed italic">{activeLead.summary}</p>
+               </div>
+             )}
+
              <div className="flex-1 overflow-y-auto p-10 space-y-6 custom-scrollbar">
                 {activeMessages.map((m, i) => (
                   <div key={i} className={`flex ${m.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
@@ -390,12 +447,18 @@ export default function App() {
            </div>
          )}
 
-         {/* Вкладка: ИНТЕГРАЦИИ (ВОССТАНОВЛЕНА ПОЛНОСТЬЮ) */}
+         {/* Вкладка: ИНТЕГРАЦИИ (ДОБАВЛЕНО СОХРАНЕНИЕ КЛЮЧЕЙ) */}
          {currentTab === 'integrations' && (
            <div className="flex-1 p-12 overflow-y-auto">
               <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Источники и Интеграции</h2>
-              <p className="text-sm text-slate-500 font-medium mb-10">Омниканальность: подключайте мессенджеры напрямую или через агрегаторы, и отправляйте лиды в вашу текущую CRM.</p>
+              <p className="text-sm text-slate-500 font-medium mb-6">Омниканальность: подключайте мессенджеры напрямую или через агрегаторы, и отправляйте лиды в вашу текущую CRM.</p>
               
+              <div className="mb-8 max-w-5xl flex justify-end">
+                 <button onClick={saveIntegrations} disabled={isSavingIntegrations} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl transition-all flex items-center gap-2 disabled:opacity-50">
+                    <Save size={16} /> Сохранить интеграции
+                 </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-6 max-w-5xl">
                  {/* Card 1: Telegram & MAX */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 border-t-4 border-t-blue-500 flex flex-col justify-between">
@@ -405,8 +468,7 @@ export default function App() {
                        <p className="text-xs text-slate-500 mb-6 leading-relaxed">Бесплатно и моментально. Вставьте токен от @BotFather (TG) или Мессенджера MAX.</p>
                     </div>
                     <div>
-                       <input type="text" placeholder="123456789:ABCDefgh..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm mb-4 outline-none focus:border-blue-400" />
-                       <button onClick={() => showToast("Токен сохранен")} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all">Подключить Бот</button>
+                       <input type="text" value={tgToken} onChange={e => setTgToken(e.target.value)} placeholder="123456789:ABCDefgh..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400" />
                     </div>
                  </div>
 
@@ -427,30 +489,27 @@ export default function App() {
                              <option value="female_1">Женский 1 (Спокойный)</option>
                           </select>
                        ) : (
-                          <input type="password" placeholder="xi-api-key" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-purple-400" />
+                          <input type="password" value={elevenLabsKey} onChange={e => setElevenLabsKey(e.target.value)} placeholder="ElevenLabs API Key (xi-api-key)" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-purple-400" />
                        )}
-                    </div>
-                    <div className="mt-6">
-                       <button onClick={() => showToast("Настройки голоса применены")} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all">Сохранить</button>
                     </div>
                  </div>
 
                  {/* Card 3: WhatsApp/VK (Агрегаторы) */}
-                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 col-span-2 flex items-center justify-between">
+                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
-                       <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><MessageSquare size={18} className="text-slate-400"/> WhatsApp, Instagram, VK</h3>
-                       <p className="text-xs text-slate-500 max-w-xl">Подключение сложных мессенджеров через надежных агрегаторов (Wazzup, Chat2Desk или Pact) с помощью Webhook.</p>
+                       <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><MessageSquare size={18} className="text-slate-400"/> Мессенджеры (Агрегаторы)</h3>
+                       <p className="text-xs text-slate-500 mb-4">Подключение WhatsApp/Instagram через Wazzup или Chat2Desk.</p>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 bg-amber-50 p-3 rounded-xl">В разработке (Фаза 3)</p>
                     </div>
-                    <button className="bg-slate-100 text-slate-700 px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-200 hover:bg-slate-200 transition-all">Подключить Агрегатор</button>
                  </div>
 
-                 {/* Card 4: Экспорт в CRM */}
-                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 col-span-2 flex items-center justify-between">
+                 {/* Card 4: Экспорт в CRM / Envybox */}
+                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
-                       <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><Database size={18} className="text-green-600"/> Экспорт лидов (AmoCRM / Bitrix24)</h3>
-                       <p className="text-xs text-slate-500 max-w-xl">Автоматическая отправка номера телефона и саммари разговора напрямую в вашу основную CRM-систему.</p>
+                       <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><Database size={18} className="text-green-600"/> Интеграция с Envybox</h3>
+                       <p className="text-xs text-slate-500 mb-4">Укажите API Ключ для приема сообщений с виджета сайта и экспорта готовых лидов в CRM.</p>
+                       <input type="password" value={envyboxKey} onChange={e => setEnvyboxKey(e.target.value)} placeholder="Envybox API Key" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-green-400" />
                     </div>
-                    <button className="bg-slate-100 text-slate-700 px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-200 hover:bg-slate-200 transition-all">Настроить Экспорт</button>
                  </div>
               </div>
            </div>
