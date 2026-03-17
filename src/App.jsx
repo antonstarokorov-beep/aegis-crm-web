@@ -395,12 +395,7 @@ export default function App() {
                 </div>
              </header>
 
-             {activeLead?.summary && (
-               <div className="absolute top-24 right-10 w-72 bg-white/90 backdrop-blur-md p-5 rounded-2xl shadow-xl border border-slate-100 z-20">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-blue-600 mb-2">Анализ от ИИ-агента</p>
-                  <p className="text-xs font-medium text-slate-700 leading-relaxed italic">{activeLead.summary}</p>
-               </div>
-             )}
+             {/* ВСПЛЫВАЮЩЕЕ ОКНО САММАРИ УДАЛЕНО ОТСЮДА */}
 
              <div className="flex-1 overflow-y-auto p-10 space-y-6 custom-scrollbar">
                 {activeMessages.map((m, i) => (
@@ -464,7 +459,7 @@ export default function App() {
            </div>
          )}
 
-         {/* Вкладка: ИНТЕГРАЦИИ (ДОБАВЛЕНЫ КНОПКИ СОХРАНЕНИЯ) */}
+         {/* Вкладка: ИНТЕГРАЦИИ */}
          {currentTab === 'integrations' && (
            <div className="flex-1 p-12 overflow-y-auto">
               <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Маршрутизация и Ключи</h2>
