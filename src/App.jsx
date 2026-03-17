@@ -15,13 +15,21 @@ import {
   Settings, BarChart3, Link as LinkIcon, Save, Phone, Shield, Sparkles, Search, Lock, Mail, LogOut, Database, UserCheck, Volume2, CreditCard, Wallet, Bell, Wand2, FileText, Calendar, Clock, User
 } from 'lucide-react';
 
-// --- ИНИЦИАЛИЗАЦИЯ AEGIS ENVIRONMENT ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
-const auth = app ? getAuth(app) : null;
-const db = app ? getFirestore(app) : null;
+// --- ИНИЦИАЛИЗАЦИЯ FIREBASE (РЕАЛЬНЫЕ КЛЮЧИ) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDCsU0EgUUByrAK_CG3UdIxQ7DTwhRkhvc",
+  authDomain: "aegis-crm-26ca9.firebaseapp.com",
+  projectId: "aegis-crm-26ca9",
+  storageBucket: "aegis-crm-26ca9.firebasestorage.app",
+  messagingSenderId: "438781854337",
+  appId: "1:438781854337:web:32dc926ebe06f15eab0380"
+};
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'aegis-saas-core';
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const appId = 'aegis-leads-app';
 
 const safeText = (val, fallback = '') => {
   if (typeof val === 'string' || typeof val === 'number') return String(val);
@@ -83,7 +91,7 @@ export default function App() {
   const [botInstructions, setBotInstructions] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   
-  // Integrations State (Новые поля для ключей)
+  // Integrations State
   const [tgToken, setTgToken] = useState('');
   const [envyboxKey, setEnvyboxKey] = useState('');
   const [elevenLabsKey, setElevenLabsKey] = useState('');
@@ -117,8 +125,13 @@ export default function App() {
           await signInAnonymously(auth);
         }
       } catch (error) {
-        if (error.code === 'auth/operation-not-allowed') console.warn("Анонимная авторизация отключена.");
-        else console.error("Auto-Auth Error:", error);
+        if (error.code === 'auth/operation-not-allowed') {
+            console.warn("Анонимная авторизация отключена. Ожидаем Email/Пароль.");
+        } else if (error.code === 'auth/custom-token-mismatch') {
+            console.warn("Токен среды не совпадает с вашим личным проектом Firebase. Ожидаем вход по Email/Паролю.");
+        } else {
+            console.error("Auto-Auth Error:", error);
+        }
       } finally {
         if (isMounted) setAuthReady(true);
       }
@@ -168,12 +181,12 @@ export default function App() {
         setMessages(s.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => console.error("Messages Snapshot Error:", error));
 
-    // Настройки ИИ (Промпты)
+    // Настройки ИИ
     const unsubConfig = onSnapshot(doc(db, tenantPath, 'config', 'bot_settings'), (docSnap) => {
         if (docSnap.exists()) setBotInstructions(docSnap.data().instructions || '');
     }, (error) => console.error("Config Snapshot Error:", error));
 
-    // Настройки Интеграций (Ключи API)
+    // Настройки Интеграций
     const unsubIntegrations = onSnapshot(doc(db, tenantPath, 'config', 'integrations'), (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
@@ -203,7 +216,6 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // Сохранение ключей интеграций
   const saveIntegrations = async () => {
     if (!user) return;
     setIsSavingIntegrations(true);
@@ -249,7 +261,6 @@ export default function App() {
     if (!promptGoal.trim()) return;
     setIsGeneratingPrompt(true);
     
-    // Симуляция работы AI-Фабрики ботов
     setTimeout(() => {
       const generated = `АЛГОРИТМ КВАЛИФИКАЦИИ (Сгенерировано ИИ):\nТвоя задача: Консультация и продажа по направлению "${promptGoal}".\n\n1. Поздоровайся и уточни главный запрос клиента.\n2. Выяви потребность (какие проблемы сейчас есть).\n3. Предложи решение из нашего ассортимента.\n4. Уточни срочность и комфортный бюджет.\n5. ЗАКРЫТИЕ: Попроси номер телефона для оформления заказа или детальной консультации специалиста.`;
       setBotInstructions(generated);
@@ -328,7 +339,7 @@ export default function App() {
          </div>
       </aside>
 
-      {/* 2. ПАНЕЛЬ СПИСКА ЛИДОВ (Показывается только в Чатах) */}
+      {/* 2. ПАНЕЛЬ СПИСКА ЛИДОВ */}
       {currentTab === 'chats' && (
         <aside className="w-80 border-r border-slate-200 flex flex-col shrink-0 bg-white z-20 shadow-xl">
           <header className="py-4 px-5 border-b shrink-0 bg-white flex flex-col gap-3">
@@ -357,7 +368,7 @@ export default function App() {
       {/* 3. ЦЕНТРАЛЬНАЯ РАБОЧАЯ ОБЛАСТЬ */}
       <main className="flex-1 flex flex-col bg-slate-50 overflow-hidden relative">
          
-         {/* Вкладка: ЧАТЫ (Основное окно сообщений) */}
+         {/* Вкладка: ЧАТЫ */}
          {currentTab === 'chats' && selectedId ? (
            <>
              <header className="h-20 border-b flex items-center justify-between px-10 shrink-0 bg-white shadow-sm z-10">
@@ -407,17 +418,16 @@ export default function App() {
            <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4"><MessageSquare size={64} strokeWidth={1} /><p className="text-xs font-black uppercase tracking-widest">Выберите диалог</p></div>
          ) : null}
 
-         {/* Вкладка: СЦЕНАРИИ ИИ (С ФАБРИКОЙ БОТОВ) */}
+         {/* Вкладка: СЦЕНАРИИ ИИ */}
          {currentTab === 'brain' && (
            <div className="flex-1 p-12 overflow-y-auto custom-scrollbar">
               <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Сценарии ИИ (Алгоритмы)</h2>
-              <p className="text-sm text-slate-500 font-medium mb-10">Настройте логику продаж. Загрузите готовый шаблон, напишите свой или попросите ИИ сгенерировать сценарий для вас.</p>
+              <p className="text-sm text-slate-500 font-medium mb-10">Настройте логику продаж. Загрузите готовый шаблон, напишите свой или попросите ИИ сгенерировать сценарий.</p>
               
-              {/* ФАБРИКА БОТОВ */}
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 rounded-[2rem] shadow-xl text-white mb-8 max-w-4xl relative overflow-hidden">
                  <div className="absolute top-0 right-0 opacity-10 pointer-events-none transform translate-x-4 -translate-y-4"><Bot size={150} /></div>
                  <h3 className="text-lg font-black uppercase tracking-widest mb-2 flex items-center gap-2"><Wand2 size={20}/> AI-Фабрика Ботов</h3>
-                 <p className="text-xs text-blue-100 font-medium mb-6 max-w-2xl leading-relaxed">Опишите, чем занимается ваш бизнес, и наша нейросеть сама напишет идеальный алгоритм квалификации и продаж для вашего нового бота.</p>
+                 <p className="text-xs text-blue-100 font-medium mb-6 max-w-2xl leading-relaxed">Опишите, чем занимается ваш бизнес, и наша нейросеть сама напишет идеальный алгоритм квалификации.</p>
                  
                  <div className="flex gap-4 relative z-10">
                     <input 
@@ -447,7 +457,7 @@ export default function App() {
            </div>
          )}
 
-         {/* Вкладка: ИНТЕГРАЦИИ (ДОБАВЛЕНО СОХРАНЕНИЕ КЛЮЧЕЙ) */}
+         {/* Вкладка: ИНТЕГРАЦИИ (КЛЮЧИ СОХРАНЯЮТСЯ В БД) */}
          {currentTab === 'integrations' && (
            <div className="flex-1 p-12 overflow-y-auto">
               <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Источники и Интеграции</h2>
@@ -460,7 +470,6 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-2 gap-6 max-w-5xl">
-                 {/* Card 1: Telegram & MAX */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 border-t-4 border-t-blue-500 flex flex-col justify-between">
                     <div>
                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-6"><Bot size={24} className="text-blue-600"/></div>
@@ -472,7 +481,6 @@ export default function App() {
                     </div>
                  </div>
 
-                 {/* Card 2: Voice TTS */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                        <div className="flex justify-between items-center mb-6">
@@ -494,16 +502,14 @@ export default function App() {
                     </div>
                  </div>
 
-                 {/* Card 3: WhatsApp/VK (Агрегаторы) */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                        <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><MessageSquare size={18} className="text-slate-400"/> Мессенджеры (Агрегаторы)</h3>
                        <p className="text-xs text-slate-500 mb-4">Подключение WhatsApp/Instagram через Wazzup или Chat2Desk.</p>
-                       <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 bg-amber-50 p-3 rounded-xl">В разработке (Фаза 3)</p>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 bg-amber-50 p-3 rounded-xl inline-block">В разработке (Фаза 3)</p>
                     </div>
                  </div>
 
-                 {/* Card 4: Экспорт в CRM / Envybox */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                        <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><Database size={18} className="text-green-600"/> Интеграция с Envybox</h3>
@@ -515,7 +521,7 @@ export default function App() {
            </div>
          )}
 
-         {/* Вкладка: БЕЗОПАСНОСТЬ (С ЮР. ДОКУМЕНТАМИ) */}
+         {/* Вкладка: БЕЗОПАСНОСТЬ */}
          {currentTab === 'security' && (
            <div className="flex-1 p-12 overflow-y-auto">
               <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Безопасность и ФЗ-152</h2>
@@ -540,7 +546,6 @@ export default function App() {
                     <button onClick={() => showToast("Политика хранения обновлена")} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all">Применить политику</button>
                  </div>
 
-                 {/* ЮРИДИЧЕСКИЕ ДОКУМЕНТЫ */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 col-span-2">
                     <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2"><UserCheck size={18} className="text-slate-400"/> Юридические документы (Для сайта)</h3>
                     <p className="text-xs text-slate-500 mb-6">Чтобы использовать агента легально, разместите эти документы рядом с виджетом чата или в описании бота.</p>
@@ -600,7 +605,7 @@ export default function App() {
 
       </main>
 
-      {/* 4. ПРАВАЯ ПАНЕЛЬ ЛИДА (Показывается только когда выбран диалог) */}
+      {/* 4. ПРАВАЯ ПАНЕЛЬ ЛИДА */}
       {currentTab === 'chats' && activeLead && (
         <aside className="w-80 border-l border-slate-200 bg-white flex flex-col shrink-0 z-20 shadow-xl overflow-y-auto">
            <div className="p-6">
