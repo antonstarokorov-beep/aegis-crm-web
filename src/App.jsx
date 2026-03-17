@@ -12,7 +12,7 @@ import {
 import { getFirestore, collection, onSnapshot, doc, addDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { 
   MessageSquare, Send, Bot, Zap, ArrowRight, 
-  Settings, BarChart3, Link as LinkIcon, Save, Phone, Shield, Sparkles, Search, Lock, Mail, LogOut, Database, UserCheck, Volume2, CreditCard, Wallet, Bell, Wand2, FileText, Calendar, Clock, User
+  Settings, BarChart3, Link as LinkIcon, Save, Phone, Shield, Sparkles, Search, Lock, Mail, LogOut, Database, UserCheck, Volume2, CreditCard, Wallet, Bell, Wand2, FileText, Calendar, Clock, User, ArrowUpRight
 } from 'lucide-react';
 
 // --- ИНИЦИАЛИЗАЦИЯ FIREBASE (РЕАЛЬНЫЕ КЛЮЧИ) ---
@@ -91,8 +91,10 @@ export default function App() {
   const [botInstructions, setBotInstructions] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   
-  // Integrations State
+  // Integrations State (ДОБАВЛЕН maxToken)
   const [tgToken, setTgToken] = useState('');
+  const [maxToken, setMaxToken] = useState(''); // НОВОЕ ПОЛЕ
+  const [vkTeamsToken, setVkTeamsToken] = useState(''); // ПОЛЕ ДЛЯ VK TEAMS
   const [envyboxKey, setEnvyboxKey] = useState('');
   const [elevenLabsKey, setElevenLabsKey] = useState('');
   const [voiceType, setVoiceType] = useState('builtin');
@@ -152,7 +154,7 @@ export default function App() {
       if (isLoginMode) await signInWithEmailAndPassword(auth, email, password);
       else {
         await createUserWithEmailAndPassword(auth, email, password);
-        showToast("Учетная запись успешно создана!");
+        showToast("Пространство успешно создано!");
       }
     } catch (err) {
       console.error(err);
@@ -186,11 +188,13 @@ export default function App() {
         if (docSnap.exists()) setBotInstructions(docSnap.data().instructions || '');
     }, (error) => console.error("Config Snapshot Error:", error));
 
-    // Настройки Интеграций
+    // Настройки Интеграций (ДОБАВЛЕНО ЧТЕНИЕ max_token)
     const unsubIntegrations = onSnapshot(doc(db, tenantPath, 'config', 'integrations'), (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
             setTgToken(data.telegram_token || '');
+            setMaxToken(data.max_token || ''); // Читаем токен MAX
+            setVkTeamsToken(data.vk_teams_token || ''); // Читаем токен VK Teams
             setEnvyboxKey(data.envybox_api_key || '');
             setElevenLabsKey(data.elevenlabs_api_key || '');
             if (data.voice_type) setVoiceType(data.voice_type);
@@ -216,6 +220,7 @@ export default function App() {
     setIsSaving(false);
   };
 
+  // СОХРАНЕНИЕ ИНТЕГРАЦИЙ (ДОБАВЛЕНО СОХРАНЕНИЕ max_token)
   const saveIntegrations = async () => {
     if (!user) return;
     setIsSavingIntegrations(true);
@@ -223,6 +228,8 @@ export default function App() {
       const tenantPath = `artifacts/${appId}/users/${user.uid}`;
       await setDoc(doc(db, tenantPath, 'config', 'integrations'), {
         telegram_token: tgToken,
+        max_token: maxToken, // Сохраняем токен MAX
+        vk_teams_token: vkTeamsToken, // Сохраняем токен VK Teams
         envybox_api_key: envyboxKey,
         elevenlabs_api_key: elevenLabsKey,
         voice_type: voiceType,
@@ -290,10 +297,10 @@ export default function App() {
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,rgba(37,99,235,0.1)_0,rgba(15,23,42,1)_100%)] pointer-events-none"></div>
         <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full border-b-8 border-blue-600 z-10">
            <div className="w-20 h-20 bg-blue-600 rounded-3xl mx-auto flex items-center justify-center mb-8 shadow-xl shadow-blue-500/30">
-              <Shield size={40} className="text-white" />
+              <Bot size={40} className="text-white" />
            </div>
-           <h1 className="text-3xl font-black text-slate-800 tracking-tighter uppercase leading-none text-center">Aegis SaaS</h1>
-           <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em] mt-3 mb-8 text-center">AI Агенты & Квалификация</p>
+           <h1 className="text-3xl font-black text-slate-800 tracking-tighter uppercase leading-none text-center">Aegis AI Hub</h1>
+           <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em] mt-3 mb-8 text-center">Платформа AI-Агентов</p>
            
            <form onSubmit={handleAuth} className="space-y-4">
              {authError && <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 text-center">{authError}</div>}
@@ -329,9 +336,9 @@ export default function App() {
          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/50 mb-4">
             <Bot size={24} className="text-white" />
          </div>
-         <button onClick={() => setCurrentTab('chats')} className={`p-4 rounded-2xl transition-all ${currentTab === 'chats' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Чаты"><MessageSquare size={22} /></button>
+         <button onClick={() => setCurrentTab('chats')} className={`p-4 rounded-2xl transition-all ${currentTab === 'chats' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Чаты Агента"><MessageSquare size={22} /></button>
          <button onClick={() => setCurrentTab('brain')} className={`p-4 rounded-2xl transition-all ${currentTab === 'brain' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="AI-Агент (Сценарии)"><Settings size={22} /></button>
-         <button onClick={() => setCurrentTab('integrations')} className={`p-4 rounded-2xl transition-all ${currentTab === 'integrations' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Интеграции"><LinkIcon size={22} /></button>
+         <button onClick={() => setCurrentTab('integrations')} className={`p-4 rounded-2xl transition-all ${currentTab === 'integrations' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Маршрутизация (Ключи)"><LinkIcon size={22} /></button>
          <button onClick={() => setCurrentTab('analytics')} className={`p-4 rounded-2xl transition-all ${currentTab === 'analytics' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Биллинг"><BarChart3 size={22} /></button>
          <button onClick={() => setCurrentTab('security')} className={`p-4 rounded-2xl transition-all ${currentTab === 'security' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Безопасность"><Shield size={22} /></button>
          <div className="mt-auto">
@@ -343,7 +350,7 @@ export default function App() {
       {currentTab === 'chats' && (
         <aside className="w-80 border-r border-slate-200 flex flex-col shrink-0 bg-white z-20 shadow-xl">
           <header className="py-4 px-5 border-b shrink-0 bg-white flex flex-col gap-3">
-             <h2 className="font-black text-xs uppercase tracking-widest text-slate-800">Все лиды</h2>
+             <h2 className="font-black text-xs uppercase tracking-widest text-slate-800">Диалоги агента</h2>
              <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input type="text" placeholder="Поиск (имя, тел, ник)..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-3 text-[11px] font-bold outline-none focus:border-blue-400 transition-colors"/>
@@ -360,7 +367,7 @@ export default function App() {
                   <div className={`text-[9px] font-black uppercase tracking-widest ${selectedId === l.id ? 'text-blue-300' : 'text-slate-400'}`}>{safeText(l.updatedAt)}</div>
                </button>
              ))}
-             {filteredLeads.length === 0 && <div className="text-center p-4 text-xs font-bold text-slate-400">Лиды не найдены</div>}
+             {filteredLeads.length === 0 && <div className="text-center p-4 text-xs font-bold text-slate-400">Диалоги не найдены</div>}
           </div>
         </aside>
       )}
@@ -421,7 +428,7 @@ export default function App() {
          {/* Вкладка: СЦЕНАРИИ ИИ */}
          {currentTab === 'brain' && (
            <div className="flex-1 p-12 overflow-y-auto custom-scrollbar">
-              <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Сценарии ИИ (Алгоритмы)</h2>
+              <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Настройка AI-Агента</h2>
               <p className="text-sm text-slate-500 font-medium mb-10">Настройте логику продаж. Загрузите готовый шаблон, напишите свой или попросите ИИ сгенерировать сценарий.</p>
               
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 rounded-[2rem] shadow-xl text-white mb-8 max-w-4xl relative overflow-hidden">
@@ -452,35 +459,49 @@ export default function App() {
                  </div>
 
                  <textarea value={botInstructions} onChange={(e) => setBotInstructions(e.target.value)} className="w-full h-80 bg-slate-50 border-2 border-slate-100 rounded-3xl p-6 outline-none focus:border-blue-500/30 transition-all font-mono text-sm leading-relaxed text-slate-700 mb-6 resize-none" placeholder="Текущий алгоритм бота..." />
-                 <button onClick={saveBrainSettings} disabled={isSaving} className="bg-slate-800 hover:bg-slate-900 text-white px-8 py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl transition-all flex items-center gap-2"><Save size={16} /> Сохранить в память ИИ</button>
+                 <button onClick={saveBrainSettings} disabled={isSaving} className="bg-slate-800 hover:bg-slate-900 text-white px-8 py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl transition-all flex items-center gap-2"><Save size={16} /> Сохранить профиль агента</button>
               </div>
            </div>
          )}
 
-         {/* Вкладка: ИНТЕГРАЦИИ (КЛЮЧИ СОХРАНЯЮТСЯ В БД) */}
+         {/* Вкладка: ИНТЕГРАЦИИ */}
          {currentTab === 'integrations' && (
            <div className="flex-1 p-12 overflow-y-auto">
-              <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Источники и Интеграции</h2>
-              <p className="text-sm text-slate-500 font-medium mb-6">Омниканальность: подключайте мессенджеры напрямую или через агрегаторы, и отправляйте лиды в вашу текущую CRM.</p>
+              <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Маршрутизация и Ключи</h2>
+              <p className="text-sm text-slate-500 font-medium mb-6">Подключайте входящий трафик (Telegram/Сайт) и настраивайте экспорт лидов в вашу внешнюю CRM.</p>
               
               <div className="mb-8 max-w-5xl flex justify-end">
                  <button onClick={saveIntegrations} disabled={isSavingIntegrations} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl transition-all flex items-center gap-2 disabled:opacity-50">
-                    <Save size={16} /> Сохранить интеграции
+                    <Save size={16} /> Сохранить ключи
                  </button>
               </div>
 
               <div className="grid grid-cols-2 gap-6 max-w-5xl">
+                 {/* ВХОДЯЩИЙ ТРАФИК (Прямое API) */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 border-t-4 border-t-blue-500 flex flex-col justify-between">
                     <div>
                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-6"><Bot size={24} className="text-blue-600"/></div>
-                       <h3 className="text-lg font-black text-slate-800 mb-2">Telegram / VK Teams (API)</h3>
-                       <p className="text-xs text-slate-500 mb-6 leading-relaxed">Бесплатно и моментально. Вставьте токен от @BotFather (TG) или Мессенджера MAX.</p>
+                       <h3 className="text-lg font-black text-slate-800 mb-2">Мессенджеры (Прямое API)</h3>
+                       <p className="text-xs text-slate-500 mb-6 leading-relaxed">Бесплатно и моментально. Вставьте токены ботов для работы ИИ-агента напрямую.</p>
                     </div>
-                    <div>
-                       <input type="text" value={tgToken} onChange={e => setTgToken(e.target.value)} placeholder="123456789:ABCDefgh..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400" />
+                    <div className="space-y-4">
+                       <div>
+                          <p className="text-[10px] font-bold text-slate-500 mb-1 ml-2 uppercase">Telegram (@BotFather)</p>
+                          <input type="text" value={tgToken} onChange={e => setTgToken(e.target.value)} placeholder="123456789:ABCDefgh..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400" />
+                       </div>
+                       <div>
+                          <p className="text-[10px] font-bold text-slate-500 mb-1 ml-2 uppercase">Мессенджер MAX</p>
+                          <input type="text" value={maxToken} onChange={e => setMaxToken(e.target.value)} placeholder="Токен Мессенджера MAX" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400" />
+                       </div>
+                       <div>
+                          <p className="text-[10px] font-bold text-slate-500 mb-1 ml-2 uppercase">VK Teams</p>
+                          <p className="text-[10px] text-slate-400 mb-2 ml-2 leading-tight">Корпоративный мессенджер от VK. Часто используется в госсекторе и крупном бизнесе РФ как защищенная альтернатива Telegram/Slack.</p>
+                          <input type="text" value={vkTeamsToken} onChange={e => setVkTeamsToken(e.target.value)} placeholder="Токен VK Teams API" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400" />
+                       </div>
                     </div>
                  </div>
 
+                 {/* ГОЛОСОВОЙ ДВИЖОК */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                        <div className="flex justify-between items-center mb-6">
@@ -502,21 +523,27 @@ export default function App() {
                     </div>
                  </div>
 
-                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col justify-between">
+                 {/* АГРЕГАТОРЫ (ВОССТАНОВЛЕНО) */}
+                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 col-span-2 flex flex-col justify-between">
                     <div>
                        <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><MessageSquare size={18} className="text-slate-400"/> Мессенджеры (Агрегаторы)</h3>
-                       <p className="text-xs text-slate-500 mb-4">Подключение WhatsApp/Instagram через Wazzup или Chat2Desk.</p>
+                       <p className="text-xs text-slate-500 mb-4 max-w-2xl">Подключение сложных мессенджеров (WhatsApp, Instagram, VK) через надежных агрегаторов (Wazzup, Chat2Desk или Pact) с помощью Webhook.</p>
                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 bg-amber-50 p-3 rounded-xl inline-block">В разработке (Фаза 3)</p>
                     </div>
                  </div>
 
-                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col justify-between">
+                 {/* ИСХОДЯЩИЙ ТРАФИК (ЭКСПОРТ В CRM) */}
+                 <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 col-span-2 flex flex-col justify-between">
                     <div>
-                       <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><Database size={18} className="text-green-600"/> Интеграция с Envybox</h3>
-                       <p className="text-xs text-slate-500 mb-4">Укажите API Ключ для приема сообщений с виджета сайта и экспорта готовых лидов в CRM.</p>
-                       <input type="password" value={envyboxKey} onChange={e => setEnvyboxKey(e.target.value)} placeholder="Envybox API Key" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-green-400" />
+                       <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><ArrowUpRight size={18} className="text-green-600"/> Экспорт лидов во внешнюю CRM (Envybox)</h3>
+                       <p className="text-xs text-slate-500 mb-4 max-w-2xl">
+                          Укажите API-ключ вашей CRM-системы. Как только ИИ-агент получит телефон клиента и проведет квалификацию, 
+                          он автоматически создаст там новую сделку и передаст выжимку диалога вашим менеджерам.
+                       </p>
+                       <input type="password" value={envyboxKey} onChange={e => setEnvyboxKey(e.target.value)} placeholder="Ваш API-ключ от внешней CRM (Envybox)" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-green-400" />
                     </div>
                  </div>
+                 
               </div>
            </div>
          )}
