@@ -91,10 +91,10 @@ export default function App() {
   const [botInstructions, setBotInstructions] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   
-  // Integrations State (ДОБАВЛЕН maxToken)
+  // Integrations State
   const [tgToken, setTgToken] = useState('');
-  const [maxToken, setMaxToken] = useState(''); // НОВОЕ ПОЛЕ
-  const [vkTeamsToken, setVkTeamsToken] = useState(''); // ПОЛЕ ДЛЯ VK TEAMS
+  const [maxToken, setMaxToken] = useState(''); 
+  const [vkTeamsToken, setVkTeamsToken] = useState(''); 
   const [envyboxKey, setEnvyboxKey] = useState('');
   const [elevenLabsKey, setElevenLabsKey] = useState('');
   const [voiceType, setVoiceType] = useState('builtin');
@@ -188,13 +188,13 @@ export default function App() {
         if (docSnap.exists()) setBotInstructions(docSnap.data().instructions || '');
     }, (error) => console.error("Config Snapshot Error:", error));
 
-    // Настройки Интеграций (ДОБАВЛЕНО ЧТЕНИЕ max_token)
+    // Настройки Интеграций
     const unsubIntegrations = onSnapshot(doc(db, tenantPath, 'config', 'integrations'), (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
             setTgToken(data.telegram_token || '');
-            setMaxToken(data.max_token || ''); // Читаем токен MAX
-            setVkTeamsToken(data.vk_teams_token || ''); // Читаем токен VK Teams
+            setMaxToken(data.max_token || ''); 
+            setVkTeamsToken(data.vk_teams_token || ''); 
             setEnvyboxKey(data.envybox_api_key || '');
             setElevenLabsKey(data.elevenlabs_api_key || '');
             if (data.voice_type) setVoiceType(data.voice_type);
@@ -220,7 +220,7 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // СОХРАНЕНИЕ ИНТЕГРАЦИЙ (ДОБАВЛЕНО СОХРАНЕНИЕ max_token)
+  // СОХРАНЕНИЕ ИНТЕГРАЦИЙ
   const saveIntegrations = async () => {
     if (!user) return;
     setIsSavingIntegrations(true);
@@ -228,15 +228,15 @@ export default function App() {
       const tenantPath = `artifacts/${appId}/users/${user.uid}`;
       await setDoc(doc(db, tenantPath, 'config', 'integrations'), {
         telegram_token: tgToken,
-        max_token: maxToken, // Сохраняем токен MAX
-        vk_teams_token: vkTeamsToken, // Сохраняем токен VK Teams
+        max_token: maxToken, 
+        vk_teams_token: vkTeamsToken, 
         envybox_api_key: envyboxKey,
         elevenlabs_api_key: elevenLabsKey,
         voice_type: voiceType,
         builtin_voice: builtinVoice,
         updatedAt: Date.now()
       }, { merge: true });
-      showToast("Настройки интеграций надежно сохранены!");
+      showToast("Настройки успешно сохранены в защищенном хранилище!");
     } catch (e) { showToast("Ошибка сохранения: " + e.message); }
     setIsSavingIntegrations(false);
   };
@@ -464,17 +464,11 @@ export default function App() {
            </div>
          )}
 
-         {/* Вкладка: ИНТЕГРАЦИИ */}
+         {/* Вкладка: ИНТЕГРАЦИИ (ДОБАВЛЕНЫ КНОПКИ СОХРАНЕНИЯ) */}
          {currentTab === 'integrations' && (
            <div className="flex-1 p-12 overflow-y-auto">
               <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-2">Маршрутизация и Ключи</h2>
               <p className="text-sm text-slate-500 font-medium mb-6">Подключайте входящий трафик (Telegram/Сайт) и настраивайте экспорт лидов в вашу внешнюю CRM.</p>
-              
-              <div className="mb-8 max-w-5xl flex justify-end">
-                 <button onClick={saveIntegrations} disabled={isSavingIntegrations} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-xl transition-all flex items-center gap-2 disabled:opacity-50">
-                    <Save size={16} /> Сохранить ключи
-                 </button>
-              </div>
 
               <div className="grid grid-cols-2 gap-6 max-w-5xl">
                  {/* ВХОДЯЩИЙ ТРАФИК (Прямое API) */}
@@ -498,6 +492,9 @@ export default function App() {
                           <p className="text-[10px] text-slate-400 mb-2 ml-2 leading-tight">Корпоративный мессенджер от VK. Часто используется в госсекторе и крупном бизнесе РФ как защищенная альтернатива Telegram/Slack.</p>
                           <input type="text" value={vkTeamsToken} onChange={e => setVkTeamsToken(e.target.value)} placeholder="Токен VK Teams API" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400" />
                        </div>
+                       <button onClick={saveIntegrations} disabled={isSavingIntegrations} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all mt-4">
+                          Сохранить токены
+                       </button>
                     </div>
                  </div>
 
@@ -521,9 +518,14 @@ export default function App() {
                           <input type="password" value={elevenLabsKey} onChange={e => setElevenLabsKey(e.target.value)} placeholder="ElevenLabs API Key (xi-api-key)" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-purple-400" />
                        )}
                     </div>
+                    <div className="mt-6">
+                       <button onClick={saveIntegrations} disabled={isSavingIntegrations} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all">
+                          Применить настройки
+                       </button>
+                    </div>
                  </div>
 
-                 {/* АГРЕГАТОРЫ (ВОССТАНОВЛЕНО) */}
+                 {/* АГРЕГАТОРЫ */}
                  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 col-span-2 flex flex-col justify-between">
                     <div>
                        <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2"><MessageSquare size={18} className="text-slate-400"/> Мессенджеры (Агрегаторы)</h3>
@@ -540,7 +542,12 @@ export default function App() {
                           Укажите API-ключ вашей CRM-системы. Как только ИИ-агент получит телефон клиента и проведет квалификацию, 
                           он автоматически создаст там новую сделку и передаст выжимку диалога вашим менеджерам.
                        </p>
-                       <input type="password" value={envyboxKey} onChange={e => setEnvyboxKey(e.target.value)} placeholder="Ваш API-ключ от внешней CRM (Envybox)" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-green-400" />
+                       <div className="flex gap-4">
+                          <input type="password" value={envyboxKey} onChange={e => setEnvyboxKey(e.target.value)} placeholder="Ваш API-ключ от внешней CRM (Envybox)" className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-green-400" />
+                          <button onClick={saveIntegrations} disabled={isSavingIntegrations} className="bg-green-600 hover:bg-green-700 text-white px-8 rounded-xl font-black uppercase text-xs tracking-widest transition-all disabled:opacity-50">
+                             Сохранить ключ
+                          </button>
+                       </div>
                     </div>
                  </div>
                  
